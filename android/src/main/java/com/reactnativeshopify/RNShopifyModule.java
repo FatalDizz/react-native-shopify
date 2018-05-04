@@ -85,8 +85,6 @@ public class RNShopifyModule extends ReactContextBaseJavaModule {
           WritableArray array = new WritableNativeArray();
 
           for(Collection collection : collections) {
-            WritableMap collectionDictionary = convertJsonToMap(new JSONObject(collection.toJsonString()));
-            collectionDictionary.putInt("id", collectionDictionary.getInt("collection_id"));
             array.pushMap(collectionDictionary);
           }
 
