@@ -8,8 +8,11 @@ import java.util.Iterator;
 
 import org.json.*;
 
+import android.content.ActivityNotFoundException;
 import android.content.Context;
+import android.content.Intent;
 import android.content.pm.ApplicationInfo;
+import android.net.Uri;
 
 import com.facebook.react.bridge.ReactApplicationContext;
 import com.facebook.react.bridge.ReactContextBaseJavaModule;
@@ -85,6 +88,7 @@ public class RNShopifyModule extends ReactContextBaseJavaModule {
           WritableArray array = new WritableNativeArray();
 
           for(Collection collection : collections) {
+            WritableMap collectionDictionary = convertJsonToMap(new JSONObject(collection.toJsonString()));
             array.pushMap(collectionDictionary);
           }
 
@@ -185,6 +189,81 @@ public class RNShopifyModule extends ReactContextBaseJavaModule {
         promise.reject("", error.getRetrofitErrorBody());
       }
     });
+  }
+
+  @ReactMethod
+  public void webCheckout(ReadableArray cartItems, final Promise promise) {
+    Cart cart;
+    try {
+      cart = new Cart();
+      for (int i = 0; i < cartItems.size(); i++) {
+        ReadableMap cartItem = cartItems.getMap(i);
+        ReadableMap variantDictionary = cartItem.getMap("variant");
+        int quantity = cartItem.getInt("quantity");
+
+        JSONObject variantAsJsonObject = convertMapToJson(variantDictionary);
+        ProductVariant variant = fromVariantJson(variantAsJsonObject.toString());
+
+        for(int j = 0; j < quantity; j++) {
+          cart.addVariant(variant);
+        }
+      }
+    } catch (JSONException e) {
+      promise.reject("", e);
+      return;
+    }
+    checkout = new Checkout(cart);
+
+    if (checkout != null) {
+
+      buyClient.createCheckout(checkout, new Callback<Checkout>() {
+
+        @Override
+        public void success(Checkout checkout) {
+          RNShopifyModule.this.checkout = checkout;
+
+
+          Intent intent = new Intent(Intent.ACTION_VIEW);
+          intent.setData(Uri.parse(checkout.getWebUrl()));
+          intent.setPackage("com.android.chrome");
+          Context context = RNShopifyModule.this.reactContext.getApplicationContext();
+          intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+          try {
+            context.startActivity(intent);
+            promise.resolve(true);
+          } catch (ActivityNotFoundException e){
+            promise.reject("Error", "Please Checkout");
+          }
+        }
+
+        @Override
+        public void failure(BuyClientError error) {
+          promise.reject("", error.getRetrofitErrorBody());
+        }
+      });
+    }
+    else {
+      promise.reject("Error", "Please checkout ");
+    }
+  }
+
+  @ReactMethod
+  public void getCheckoutCompletionStatus(final Promise promise) {
+    if(checkout!=null) {
+      buyClient.getCheckoutCompletionStatus(checkout.getToken(), new Callback<Boolean>() {
+        @Override
+        public void success(Boolean status) {
+          promise.resolve(status);
+        }
+
+        @Override
+        public void failure(BuyClientError error) {
+          promise.reject("", error.getRetrofitErrorBody());
+        }
+      });
+    }else{
+      promise.reject("", "no checkout");
+    }
   }
 
   @ReactMethod
@@ -510,3 +589,4 @@ public class RNShopifyModule extends ReactContextBaseJavaModule {
     return stringId == 0 ? applicationInfo.nonLocalizedLabel.toString() : context.getString(stringId);
   }
 }
+
